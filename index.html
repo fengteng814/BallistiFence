@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trap/Skeet 三维场景（射击位 + 靶轨包络）- 离线</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="./plotly.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <div class="title">场地—射击位—靶轨统一三维模型（离线）</div>
+    <div class="subtitle">
+      统一坐标系中叠加：射击位（站位/枪口高度/扇域）+ 靶源（靶机/靶屋）+ 碟靶轨迹包络。支持 Profile（ISSF/包络/单组/单源）与轻量级显示过滤。
+    </div>
+
+    <div class="section">
+      
+      <div class="btnbar btnbar-views" style="margin-top:10px;">
+        <select id="viewPreset" class="pill-select" title="视角方向（不强制投影类型）">
+          <option value="free">视角：自由</option>
+          <option value="ne">视角：东北（轴测）</option>
+          <option value="nw">视角：西北（轴测）</option>
+          <option value="se">视角：东南（轴测）</option>
+          <option value="sw">视角：西南（轴测）</option>
+          <option value="front">视角：前</option>
+          <option value="back">视角：后</option>
+          <option value="left">视角：左</option>
+          <option value="right">视角：右</option>
+          <option value="top">视角：上</option>
+          <option value="bottom">视角：下</option>
+        </select>
+        <button class="pill" id="btnProj" title="切换正投影/透视">正投影</button>
+        <button class="pill" id="btnSaveView" title="保存当前视角（导出 JSON 会包含）">保存视角</button>
+      </div>
+<div class="btnbar">
+        <button class="primary" id="btnRefresh">刷新</button>
+        <button id="btnReset">重置</button>
+        <button id="btnExport">导出</button>
+        <button id="btnTheme" class="pill" data-theme="dark">暗色</button>
+        <button id="btnRealtime" class="pill" data-on="1">实时</button>
+      </div>
+      <div id="pending" class="pending">参数已变更：当前为“手动”，请点击“刷新”以更新场景。</div>
+
+      <div class="kpi">
+        <div class="card"><div class="v" id="kStations">-</div><div class="k">射击位数量</div></div>
+        <div class="card"><div class="v" id="kSources">-</div><div class="k">靶源数量</div></div>
+        <div class="card"><div class="v" id="kTraj">-</div><div class="k">靶轨数量</div></div>
+        <div class="card"><div class="v" id="kBBox">-</div><div class="k">包围盒（m）</div></div>
+      </div>
+      <!-- 光标信息：无需在左侧显示（使用 Plotly 自带 hover 提示即可） -->
+      <div class="foot">版本：v0.8（右上角视角下拉 + 正投影/透视切换 + 视角保存/导出 + Hover 参数 + Trap Setting Tables）</div>
+    </div>
+
+    <div class="section">
+      <h3>场景选择</h3>
+      <div class="row">
+        <label>项目</label>
+        <select id="discipline">
+          <option value="trap">Trap</option>
+          <option value="skeet">Skeet</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>ISSF 方案</label>
+        <select id="profile"></select>
+      </div>
+      <div class="row" id="trapTableRow" style="display:none;">
+        <label>Trap 设置表</label>
+        <select id="trapTable">
+          <option value="I">Table I</option>
+          <option value="II">Table II</option>
+          <option value="III">Table III</option>
+          <option value="IV">Table IV</option>
+          <option value="V">Table V</option>
+          <option value="VI">Table VI</option>
+          <option value="VII">Table VII</option>
+          <option value="VIII">Table VIII</option>
+          <option value="IX">Table IX</option>
+        </select>
+      </div>
+
+      <div class="row" id="profileGroupRow" style="display:none;">
+        <label>选择组</label>
+        <select id="profileGroup">
+          <option value="1">G1</option><option value="2">G2</option><option value="3">G3</option><option value="4">G4</option><option value="5">G5</option>
+        </select>
+      </div>
+
+      <div class="row" id="profileMachineRow" style="display:none;">
+        <label>选择靶机</label>
+        <select id="profileMachine">
+          <option value="1">#1</option><option value="2">#2</option><option value="3">#3</option><option value="4">#4</option><option value="5">#5</option>
+          <option value="6">#6</option><option value="7">#7</option><option value="8">#8</option><option value="9">#9</option><option value="10">#10</option>
+          <option value="11">#11</option><option value="12">#12</option><option value="13">#13</option><option value="14">#14</option><option value="15">#15</option>
+        </select>
+      </div>
+
+      <div class="row" id="granularityRow">
+        <label>显示粒度</label>
+        <select id="granularity">
+          <option value="group">组级（默认）</option>
+          <option value="machine">靶机级（可折叠）</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>轨迹采样密度</label>
+        <input id="samplesPerSource" type="number" min="1" max="60" value="18" />
+      </div>
+      <div class="row">
+        <label>轨迹点步长（m）</label>
+        <input id="stepM" type="number" min="0.1" max="2.0" value="0.5" step="0.1" />
+      </div>
+
+      <div class="toggles">
+        <label class="toggle"><input id="showStations" type="checkbox" checked /><span>射击位</span></label>
+        <label class="toggle"><input id="showSectors" type="checkbox" checked /><span>扇域</span></label>
+        <label class="toggle"><input id="showMachines" type="checkbox" checked /><span>靶源</span></label>
+        <label class="toggle"><input id="showTraj" type="checkbox" checked /><span>靶轨</span></label>
+        <label class="toggle"><input id="onlyEnvelope" type="checkbox" /><span>只显示包络</span></label>
+        <label class="toggle"><input id="showAxes" type="checkbox" checked /><span>坐标轴</span></label>
+      </div>
+
+      <div class="traj-panel" id="trajControls"></div>
+      <div class="note" id="assumptions"></div>
+    </div>
+
+    <div class="section">
+      <h3>射击位参数</h3>
+      <div class="row">
+        <label>枪口高度（m）</label>
+        <input id="gunH" type="number" min="0.8" max="2.2" value="1.50" step="0.05" />
+      </div>
+      <div class="row">
+        <label>扇域方位 ±（°）</label>
+        <input id="azHalf" type="number" min="10" max="120" value="75" step="1" />
+      </div>
+      <div class="row">
+        <label>扇域仰角（°）</label>
+        <div style="display:flex; gap:8px; width:100%;">
+          <input id="elMin" type="number" min="-5" max="30" value="0" step="1" />
+          <input id="elMax" type="number" min="10" max="80" value="60" step="1" />
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>设定窗口（包络生成）</h3>
+      <div id="settingTrap">
+        <div class="row"><label>Trap：10 m 高度</label>
+          <div style="display:flex; gap:8px; width:100%;">
+            <input id="trapH10Min" type="number" min="1.0" max="3.0" value="1.5" step="0.05" />
+            <input id="trapH10Max" type="number" min="1.0" max="3.2" value="3.0" step="0.05" />
+          </div>
+        </div>
+        <div class="row"><label>Trap：最大偏角</label>
+          <input id="trapAzMax" type="number" min="10" max="60" value="45" step="1" />
+        </div>
+        <div class="row"><label>Trap：携带距离</label>
+          <input id="trapCarry" type="number" min="60" max="90" value="76" step="0.1" />
+        </div>
+      </div>
+
+      <div id="settingSkeet" style="display:none;">
+        <div class="row"><label>Skeet：交叉点高度</label>
+          <input id="skeetCrossZ" type="number" min="3.5" max="6.0" value="4.6" step="0.05" />
+        </div>
+        <div class="row"><label>Skeet：携带距离</label>
+          <input id="skeetCarry" type="number" min="55" max="80" value="68" step="0.1" />
+        </div>
+      </div>
+    </div>
+
+    
+    <div class="section">
+      <h3>射击窗口—弹道耦合</h3>
+
+      <div class="row">
+        <label>启用</label>
+        <label class="toggle"><input id="cplEnable" type="checkbox" /><span>叠加射击锥 / 弹道族 / 落弹区</span></label>
+      </div>
+
+      <div class="row">
+        <label>射击位</label>
+        <select id="cplStation"></select>
+      </div>
+
+      
+      <div class="cpl-cols">
+        <details class="subsec" open>
+          <summary>射击窗口与采样</summary>
+          <div class="subsec-body">
+<div class="row">
+        <label>时间模式</label>
+        <select id="cplTimeMode">
+          <option value="window">窗口采样</option>
+          <option value="manual">手动时间点</option>
+        </select>
+      </div>
+
+<div class="row" id="cplTimesRow">
+        <label>时间点列表（s）</label>
+        <input id="cplTimes" type="text" value="0.20,0.40,0.60" placeholder="例如：0.20,0.45,0.80" />
+      </div>
+
+<div class="row">
+        <label>射击窗口（s）</label>
+        <div style="display:flex; gap:8px; width:100%;">
+          <input id="cplT0" type="number" min="0" max="5" value="0.20" step="0.05" title="起始时间（相对放靶）" />
+          <input id="cplT1" type="number" min="0.05" max="8" value="2.20" step="0.05" title="结束时间（相对放靶）" />
+        </div>
+      </div>
+
+<div class="row">
+        <label>粗采样 dt（s）</label>
+        <input id="cplDt" type="number" min="0.01" max="0.30" value="0.05" step="0.01" />
+      </div>
+
+<div class="row">
+        <label>自适应加密</label>
+        <div style="display:flex; gap:8px; width:100%;">
+          <label class="toggle"><input id="cplAdaptive" type="checkbox" checked /><span>开启</span></label>
+          <input id="cplDtFine" type="number" min="0.002" max="0.05" value="0.01" step="0.002" title="加密 dt（s）" />
+          <input id="cplBand" type="number" min="0.05" max="1.0" value="0.20" step="0.05" title="加密区间半宽（s）" />
+        </div>
+      </div>
+
+<div class="row">
+        <label>样本数（每射击位）</label>
+        <input id="cplNSamples" type="number" min="200" max="20000" value="3000" step="100" />
+      </div>
+
+<div class="row">
+        <label>随机种子</label>
+        <input id="cplSeed" type="number" min="1" max="999999" value="12345" step="1" />
+      </div>
+
+
+
+      <div class="row">
+        <label>扇域裁剪</label>
+        <label class="toggle"><input id="cplClipSector" type="checkbox" checked /><span>只保留扇域内枪口指向</span></label>
+      </div>
+
+<div class="toggles">
+        <label class="toggle"><input id="cplShowCone" type="checkbox" checked /><span>射击锥（关键射线）</span></label>
+        <label class="toggle"><input id="cplShowCritical" type="checkbox" checked /><span>控制性工况（关键弹道）</span></label>
+        <label class="toggle"><input id="cplShowImpacts" type="checkbox" checked /><span>落弹点</span></label>
+        <label class="toggle"><input id="cplShowHull" type="checkbox" checked /><span>落弹包络</span></label>
+      </div>
+          </div>
+        </details>
+
+        <details class="subsec" open>
+          <summary>弹道与环境初始参数</summary>
+          <div class="subsec-body">
+<div class="row">
+        <label>参数预设</label>
+        <select id="cplPreset">
+          <option value="default">默认（Trap/Skeet 通用）</option>
+          <option value="worst_range">最远射程（近似最不利）</option>
+          <option value="crosswind_worst">侧风最不利（横向外逸）</option>
+        </select>
+      </div>
+
+<div class="row">
+        <label>枪口初速均值（m/s）</label>
+        <input id="cplShotV0" type="number" min="250" max="450" value="370" step="1" />
+      </div>
+
+<div class="row">
+        <label>初速标准差 1σ（m/s）</label>
+        <input id="cplV0Sigma" type="number" min="0" max="30" value="6" step="0.5" />
+      </div>
+
+<div class="row">
+        <label>仰角散布 1σ（°）</label>
+        <input id="cplSpreadElevSigma" type="number" min="0" max="8" value="1.2" step="0.1" />
+      </div>
+
+<div class="row">
+        <label>方位散布 1σ（°）</label>
+        <input id="cplSpreadAzimSigma" type="number" min="0" max="8" value="1.2" step="0.1" />
+      </div>
+
+<div class="row">
+        <label>装药质量（g）</label>
+        <input id="cplShotMassG" type="number" min="10" max="40" value="24" step="0.1" />
+      </div>
+
+<div class="row">
+        <label>铅丸直径（mm）</label>
+        <input id="cplPelletDiaMM" type="number" min="1.5" max="4.0" value="2.40" step="0.01" />
+      </div>
+
+<div class="row">
+        <label>材料密度（kg/m³）</label>
+        <input id="cplPelletDensity" type="number" min="7000" max="12000" value="11340" step="10" />
+      </div>
+
+<div class="row">
+        <label>空气密度 ρ（kg/m³）</label>
+        <input id="cplRho" type="number" min="0.9" max="1.35" value="1.225" step="0.001" />
+      </div>
+
+<div class="row">
+        <label>阻力系数 Cd</label>
+        <input id="cplCd" type="number" min="0.15" max="1.20" value="0.47" step="0.01" />
+      </div>
+
+<div class="row">
+        <label>风速（m/s）</label>
+        <input id="cplWindSpeed" type="number" min="0" max="20" value="0" step="0.1" />
+      </div>
+
+<div class="row">
+        <label>风向（吹向角，°）</label>
+        <input id="cplWindDirDeg" type="number" min="-180" max="180" value="90" step="1" />
+      </div>
+
+<div class="row">
+        <label>弹道积分 dt（s）</label>
+        <input id="cplBallDt" type="number" min="0.002" max="0.05" value="0.01" step="0.001" />
+      </div>
+
+<div class="row">
+        <label>最大仿真时长（s）</label>
+        <input id="cplMaxTime" type="number" min="2" max="20" value="8.0" step="0.1" />
+      </div>
+
+<div class="note">风向采用“吹向角”定义：0° 指向 +Y（前方）；90° 指向 +X（右侧）。阻力采用球形近似：k = 0.5·ρ·Cd·A/m（由直径与密度自动推导）。</div>
+          </div>
+        </details>
+      </div><div class="note" id="cplSummary">-</div>
+
+      <div class="cpl-progress" id="cplProgress" style="display:none;">
+        <div class="cpl-progress-row">
+          <div class="cpl-progress-bar"><div class="cpl-progress-fill" id="cplProgFill"></div></div>
+          <button class="pill" id="cplCancel" title="取消本次耦合计算（可能需要等待当前批次结束）">取消</button>
+        </div>
+        <div class="cpl-progress-text" id="cplProgText">计算中…</div>
+      </div>
+    </div>
+
+<div class="section">
+      <h3>视图比例</h3>
+      <div class="row"><label>X : Y : Z</label>
+        <div style="display:flex; gap:8px; width:100%;">
+          <input id="arX" type="number" min="0.2" max="3.0" value="1.0" step="0.1" />
+          <input id="arY" type="number" min="0.2" max="3.0" value="1.0" step="0.1" />
+          <input id="arZ" type="number" min="0.2" max="3.0" value="0.6" step="0.1" />
+        </div>
+      </div>
+      <div class="note">当 X:Y:Z=1:1:1 时按真实单位比例显示；否则按手动比例缩放。</div>
+      
+
+
+    </div>
+  </aside>
+
+  <main class="plot-wrap">
+<div id="plot"></div>
+  </main>
+</div>
+
+<script src="./utils.js"></script>
+<script src="./physics.js"></script>
+<script src="./trap_tables.js"></script>
+<script src="./scene_trap.js"></script>
+<script src="./scene_skeet.js"></script>
+<script src="./coupling.js"></script>
+<script src="./viz.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
