@@ -314,10 +314,15 @@
     if (cplCfg.timeMode === "manual") cplCfg.adaptive = false;
 
     const stations = pickStations(scene, cplCfg.station);
-    const trajs = filterTrajectories(scene, enabled, active);
+    const trajsAll = filterTrajectories(scene, enabled, active);
 
-    // Trap 规则：对每个射击位，仅计算正对该射击位的 3 台靶机（同组 groupId==stationId）。
+    // Trap 规则：仅保留与选定射击位正对的 3 台靶机对应的靶轨（groupId == stationId）。
     // 说明：页面上仍可显示/开关所有靶轨，但“耦合/弹道计算”按比赛逻辑做站位过滤。
+    const trapStationIds = new Set(stations.map(s => Number(s.id)).filter(n => Number.isFinite(n)));
+    const trajs = ((scene.meta && scene.meta.discipline) === "trap")
+      ? trajsAll.filter(tr => trapStationIds.has(Number(tr.groupId)))
+      : trajsAll;
+
     function trajsForStation(st){
       if ((scene.meta && scene.meta.discipline) === "trap"){
         const sid = Number(st && st.id);
