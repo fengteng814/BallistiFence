@@ -132,6 +132,8 @@
           x:tr.points.map(p=>p[0]),
           y:tr.points.map(p=>p[1]),
           z:tr.points.map(p=>p[2]),
+          hoverinfo:"text",
+          hovertext: tr.points.map(()=>"靶轨"),
           // customdata schema for HUD: [kind, table, groupId, sourceId, azDeg, h10, carry, v0, elDeg]
           customdata: tr.points.map(()=>[
             tr.kind || "",
@@ -144,7 +146,6 @@
             (tr.params?.v0 ?? ""),
             (tr.params?.elDeg ?? "")
           ]),
-          hoverinfo:"none",
           hovertemplate:"<extra></extra>",
           showlegend:false
         });
@@ -193,7 +194,8 @@
           marker:{size:2},
           name:"落弹点（抽样）",
           customdata: cds,
-          hoverinfo:"none",
+          hoverinfo:"text",
+          hovertext: cds ? cds.map(()=>"落弹点（抽样）") : undefined,
           hovertemplate:"<extra></extra>",
           showlegend:false
         });
@@ -216,7 +218,8 @@
             marker:{size:6, symbol:"circle"},
             name:"落弹点（可追溯）",
             customdata:dcd,
-            hoverinfo:"none",
+            hoverinfo:"text",
+            hovertext: dcd.map(()=>"落弹点"),
             hovertemplate:"<extra></extra>",
             showlegend:false
           });
@@ -281,7 +284,8 @@
               impactX:c.impact[0],
               impactY:c.impact[1]
             },
-            hoverinfo:"none",
+            hoverinfo:"text",
+            hovertext: cds.map(()=>"弹道"),
             hovertemplate:"<extra></extra>",
             showlegend:false
           });
@@ -320,7 +324,8 @@
             marker:{size:7, symbol:"circle"},
             name:"命中点",
             customdata: hitCd,
-            hoverinfo:"none",
+            hoverinfo:"text",
+            hovertext: hitCd.map(()=>"命中点"),
             hovertemplate:"<extra></extra>",
             showlegend:false
           });
